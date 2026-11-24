@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Price Calculator</title>
+<meta name="robots" content="noindex">
+<style>
+/* Layout: a single column of inputs, the result under them, then the list of prices done so far. */
+:root {
+  --bg: #f2f4f1; --panel: #ffffff; --ink: #1c2420; --muted: #5b665f; --line: #d8ddd6; --field: #f7f8f6;
+  --accent: #2f6b4f; --accent-ink: #ffffff; --accent-soft: #e3efe7;
+  /* Plus and minus: soft cells, used on the +/− button, the change line and the list */
+  --plus-bg: #e1f1e6; --plus-ink: #23613f; --plus-line: #b9dcc4;
+  --minus-bg: #fbe4dd; --minus-ink: #9c3b22; --minus-line: #efc1b3;
+  --zero-bg: #eef0ed; --zero-ink: #5b665f;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131816; --panel: #1b221f; --ink: #e6ebe7; --muted: #9aa69f; --line: #2e3833; --field: #141a17;
+    --accent: #7cc5a0; --accent-ink: #10231a; --accent-soft: #213a2e;
+    --plus-bg: #1f3a2b; --plus-ink: #8fd6ae; --plus-line: #2f5a42;
+    --minus-bg: #3d241c; --minus-ink: #f4a68f; --minus-line: #64392b;
+    --zero-bg: #252c28; --zero-ink: #9aa69f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131816; --panel: #1b221f; --ink: #e6ebe7; --muted: #9aa69f; --line: #2e3833; --field: #141a17;
+  --accent: #7cc5a0; --accent-ink: #10231a; --accent-soft: #213a2e;
+  --plus-bg: #1f3a2b; --plus-ink: #8fd6ae; --plus-line: #2f5a42;
+  --minus-bg: #3d241c; --minus-ink: #f4a68f; --minus-line: #64392b;
+  --zero-bg: #252c28; --zero-ink: #9aa69f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--sans); }
+.wrap {
+  max-width: 720px; margin: 0 auto; display: grid; gap: 20px;
+  padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1 { margin: 0; font-size: 26px; line-height: 1.2; text-align: center; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: grid; gap: 18px; min-width: 0; }
+
+/* Inputs: one column */
+.field { display: grid; gap: 6px; }
+.field > label, .field > .lbl { font-size: 13px; font-weight: 600; color: var(--muted); }
+.hint { font-size: 13px; color: var(--muted); margin: 0; }
+.box {
+  display: flex; align-items: stretch; background: var(--field);
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+}
+.box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.box.bad { border-color: var(--minus-ink); }
+.box .affix { display: flex; align-items: center; padding: 0 4px 0 14px; color: var(--muted); font-size: 20px; }
+.box .affix.end { padding: 0 14px 0 4px; }
+.box input {
+  flex: 1; min-width: 0; border: 0; background: transparent; outline: none; color: var(--ink);
+  font: 600 22px/1.2 var(--sans); font-variant-numeric: tabular-nums; padding: 12px 6px;
+}
+.sign {
+  border: 0; border-right: 1px solid var(--plus-line); background: var(--plus-bg); color: var(--plus-ink);
+  font: 700 24px/1 var(--sans); width: 56px; cursor: pointer;
+}
+.sign:hover { filter: brightness(.97); }
+.sign + input { padding-left: 16px; } /* same gap as the $ sign to the price */
+.sign.neg { background: var(--minus-bg); color: var(--minus-ink); border-right-color: var(--minus-line); }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { flex: 1; font: inherit; font-size: 15px; padding: 11px 8px; border: 0; background: var(--field); color: var(--ink); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+/* Change cell: soft green for plus, soft red for minus */
+.chg {
+  display: inline-block; border-radius: 6px; padding: 1px 8px; font-weight: 600; font-variant-numeric: tabular-nums;
+  background: var(--zero-bg); color: var(--zero-ink); white-space: nowrap;
+}
+.chg.plus { background: var(--plus-bg); color: var(--plus-ink); }
+.chg.minus { background: var(--minus-bg); color: var(--minus-ink); }
+
+/* Result */
+.result { border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 6px; }
+.result .k { font-size: 13px; font-weight: 600; color: var(--muted); }
+.result .big { font-size: 44px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.result .calc { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 17px; font-variant-numeric: tabular-nums; }
+.result .note { font-size: 14px; color: var(--muted); margin: 0; font-variant-numeric: tabular-nums; }
+
+.add {
+  font: 600 17px/1.2 var(--sans); border-radius: 8px; padding: 14px 16px; cursor: pointer; width: 100%;
+  border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink);
+}
+.add:hover { filter: brightness(1.06); }
+.add:disabled { opacity: .45; cursor: default; filter: none; }
+
+/* List */
+.btn {
+  font: inherit; font-weight: 600; border-radius: 8px; padding: 8px 14px; cursor: pointer;
+  border: 1px solid var(--accent); background: transparent; color: var(--accent);
+}
+.btn:disabled { opacity: .45; cursor: default; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.list-head h2 { margin: 0; font-size: 17px; }
+.list-head .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 15px; }
+th, td { text-align: right; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+td.new { font-weight: 700; }
+td.new small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+td.x { width: 1%; padding-right: 0; }
+[data-col] { cursor: pointer; transition: background-color .12s; }
+.colhi { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); }
+thead .colhi { color: var(--accent); }
+@keyframes copied { from { background: var(--plus-line); } to { background: transparent; } }
+.colcopied { animation: copied .7s ease-out; }
+.colhi.colcopied { animation: none; }
+.tip { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
+@media (prefers-reduced-motion: reduce) { .colcopied { animation: none; } [data-col] { transition: none; } }
+.del {
+  border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 20px; line-height: 1;
+  width: 32px; height: 32px; border-radius: 6px;
+}
+.del:hover { background: var(--minus-bg); color: var(--minus-ink); }
+.empty { color: var(--muted); font-size: 14px; margin: 0; }
+#status { font-size: 14px; color: var(--accent); margin: 0; }
+#status:empty { display: none; }
+#copybox textarea { width: 100%; min-height: 120px; font: 13px ui-monospace, Consolas, monospace; background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+footer { font-size: 13px; color: var(--muted); text-align: center; }
+@media (max-width: 480px) { .result .big { font-size: 38px; } th, td { padding: 8px 5px; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Price Calculator</h1>
+  </header>
+
+  <form class="panel" id="calc" autocomplete="off" novalidate>
+    <div class="field">
+      <label for="price">Price</label>
+      <div class="box" id="price-box">
+        <span class="affix" aria-hidden="true">$</span>
+        <input type="text" id="price" inputmode="decimal" placeholder="0.00" enterkeyhint="next" autofocus>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="pct">Change</label>
+      <div class="box" id="pct-box">
+        <button type="button" class="sign" id="sign" aria-label="Increase. Click to switch to decrease">+</button>
+        <input type="text" id="pct" inputmode="decimal" placeholder="0" value="0">
+        <span class="affix end" aria-hidden="true">%</span>
+      </div>
+      <p class="hint" id="sign-hint">Click the (<b>+</b>) to switch to a decrease (<b>−</b>).</p>
+    </div>
+
+    <div class="field">
+      <span class="lbl" id="rnd-l">Round to the nickel</span>
+      <div class="seg" role="group" aria-labelledby="rnd-l" id="rnd">
+        <button type="button" data-v="up" aria-pressed="true">Up</button>
+        <button type="button" data-v="down" aria-pressed="false">Down</button>
+      </div>
+    </div>
+
+    <div class="result" aria-live="polite">
+      <div class="k">New price</div>
+      <div class="big" id="out">–</div>
+      <div class="calc" id="calcline"></div>
+      <p class="note" id="note">Type a price to start.</p>
+    </div>
+    <button type="submit" class="add" id="add" disabled>Add to list</button>
+  </form>
+
+  <section class="panel" aria-labelledby="h-list">
+    <div class="list-head">
+      <h2 id="h-list">List</h2>
+      <div class="acts">
+        <button type="button" class="btn" id="clear" disabled>Clear all</button>
+      </div>
+    </div>
+    <p class="empty" id="empty">Press <b>Add to list</b> (or Enter) to keep each new price here. Click any column to copy it into Excel.</p>
+    <div class="scroll" id="tablewrap" hidden>
+      <p class="tip">Click any column to copy it, then paste into Excel.</p>
+      <table>
+        <thead><tr>
+          <th data-col="price" tabindex="0" title="Click to copy this column">Price</th>
+          <th data-col="change" tabindex="0" title="Click to copy this column">Change ($)</th>
+          <th data-col="pct" tabindex="0" title="Click to copy this column">Change (%)</th>
+          <th data-col="new" tabindex="0" title="Click to copy this column">New price</th>
+          <th><span hidden>Delete</span></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p id="status" role="status"></p>
+    <div id="copybox" hidden>
+      <p class="empty">Your browser didn't allow copying. Select the text below and copy it.</p>
+      <textarea id="copytext" readonly aria-label="List to copy"></textarea>
+    </div>
+  </section>
+
+  <footer>Runs entirely in your browser. Nothing you type is sent anywhere.</footer>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const state = { neg: false, round: "up", list: [], nextId: 1 };
+  const MINUS = "−";
+
+  // Parse "$1,234.50", "-3.5" or "3.5%" into a number; null if it isn't one.
+  const num = s => {
+    const t = String(s).replace(/[$,%\s]/g, "").replace(/^−/, "-");
+    if (t === "" || !/^[+-]?\d*\.?\d+$/.test(t)) return null;
+    return parseFloat(t);
+  };
+  // Dollars with at least 2 and at most 4 decimals, so a sub-cent amount isn't hidden.
+  const money = x => "$" + Math.abs(x).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  const cents = x => "$" + Math.abs(x).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const r4 = x => Math.round(x * 10000) / 10000;
+
+  // Round to a nickel. Work in whole ten-thousandths of a dollar so floating-point
+  // noise can't push a price over a nickel boundary.
+  function toNickel(x, mode) {
+    const m = Math.round(x * 10000), step = 500;
+    return (mode === "down" ? Math.floor(m / step) : Math.ceil(m / step)) * step / 10000;
+  }
+
+  // Any text in the soft green (plus) or soft red (minus) cell; used by the list columns.
+  function chgPill(r, text) {
+    const cls = r.change > 0 ? "plus" : r.change < 0 ? "minus" : "";
+    return `<span class="chg ${cls}">${text}</span>`;
+  }
+  // "+ $0.50 (3.5%)" in a soft green cell, or "− $0.47 (4%)" in a soft red one.
+  function chgCell(r) {
+    const cls = r.change > 0 ? "plus" : r.change < 0 ? "minus" : "";
+    const sign = r.change < 0 ? MINUS : "+";
+    return `<span class="chg ${cls}">${sign} ${cents(r.change)} (${Math.abs(r.pct)}%)</span>`;
+  }
+
+  // A typed minus or plus sign moves into the +/− button, so the field only ever holds a size.
+  function syncSign() {
+    const el = $("pct");
+    if (/^\s*[-−]/.test(el.value)) { state.neg = true; el.value = el.value.replace(/^\s*[-−]/, ""); }
+    else if (/^\s*\+/.test(el.value)) { state.neg = false; el.value = el.value.replace(/^\s*\+/, ""); }
+    const b = $("sign");
+    b.textContent = state.neg ? MINUS : "+";
+    b.classList.toggle("neg", state.neg);
+    b.setAttribute("aria-label", state.neg ? "Decrease. Click to switch to increase" : "Increase. Click to switch to decrease");
+    $("sign-hint").innerHTML = state.neg
+      ? "Click the (<b>−</b>) to switch to an increase (<b>+</b>)."
+      : "Click the (<b>+</b>) to switch to a decrease (<b>−</b>).";
+  }
+
+  function compute() {
+    const price = num($("price").value), size = num($("pct").value);
+    const priceOk = price !== null && price >= 0, pctOk = size !== null && size >= 0 && !(state.neg && size > 100);
+    $("price-box").classList.toggle("bad", $("price").value.trim() !== "" && !priceOk);
+    $("pct-box").classList.toggle("bad", !pctOk);
+    if (!priceOk || !pctOk) return null;
+    const pct = state.neg ? -size : size;
+    const change = r4(price * pct / 100);       // the $ amount the percentage works out to
+    const exact = r4(price + change);           // before rounding
+    return { price, pct, change, exact, rounded: toNickel(exact, state.round), round: state.round };
+  }
+
+  function render() {
+    syncSign();
+    const r = compute();
+    $("add").disabled = !r;
+    if (!r) {
+      $("out").textContent = "–"; $("calcline").innerHTML = "";
+      $("note").textContent = $("price").value.trim() === "" ? "Type a price to start." : "Check the price and percentage: numbers only.";
+      return;
+    }
+    $("out").textContent = cents(r.rounded);
+    $("calcline").innerHTML = chgCell(r);
+    $("note").textContent = r.rounded === r.exact
+      ? "Already on a nickel, so no rounding needed."
+      : `Rounded ${r.round} to the nickel from ${money(r.exact)}.`;
+  }
+
+
+  function renderList() {
+    const has = state.list.length > 0;
+    $("tablewrap").hidden = !has; $("empty").hidden = has;
+    $("clear").disabled = !has;
+    $("rows").innerHTML = state.list.map(r =>
+      `<tr><td data-col="price">${cents(r.price)}</td>` +
+      `<td data-col="change">${chgPill(r, `${r.change < 0 ? MINUS : "+"} ${cents(r.change)}`)}</td>` +
+      `<td data-col="pct">${chgPill(r, `${r.pct < 0 ? MINUS : "+"}${Math.abs(r.pct)}%`)}</td>` +
+      `<td class="new" data-col="new">${cents(r.rounded)}<small>rounded ${r.round}</small></td>` +
+      `<td class="x"><button type="button" class="del" data-id="${r.id}" aria-label="Delete the ${cents(r.price)} row">×</button></td></tr>`).join("");
+  }
+
+  $("sign").addEventListener("click", () => { state.neg = !state.neg; render(); });
+  $("rnd").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    $("rnd").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    state.round = b.dataset.v; render();
+  });
+  ["price", "pct"].forEach(id => $(id).addEventListener("input", render));
+  // Add to list (the button, or Enter in either box). The % and rounding stay set,
+  // and the price is selected so the next one can be typed straight over it.
+  $("calc").addEventListener("submit", e => {
+    e.preventDefault();
+    const r = compute(); if (!r) return;
+    state.list.push({ ...r, id: state.nextId++ });
+    renderList(); $("status").textContent = "";
+    $("price").focus(); $("price").select();
+  });
+  $("rows").addEventListener("click", e => {
+    const b = e.target.closest(".del"); if (!b) return;
+    const id = +b.dataset.id;
+    state.list = state.list.filter(r => r.id !== id);
+    renderList(); $("status").textContent = "";
+  });
+  async function copyText(text, msg) {
+    try {
+      await navigator.clipboard.writeText(text);
+      $("copybox").hidden = true; $("status").textContent = msg;
+    } catch (err) {
+      $("copytext").value = text; $("copybox").hidden = false; $("copytext").select(); $("status").textContent = "";
+    }
+  }
+
+  // Copy one column: hover highlights it, a click copies its values one per line,
+  // which Excel pastes down a column. Numbers go without "$" so Excel treats them as numbers.
+  const COLS = {
+    price:  { name: "price",       value: r => r.price.toFixed(2) },
+    change: { name: "$ change",    value: r => r.change.toFixed(2) },
+    pct:    { name: "% change",    value: r => r.pct + "%" }, // with "%" so Excel reads 3.5% as a percentage
+    new:    { name: "new price",   value: r => r.rounded.toFixed(2) }
+  };
+  const table = $("tablewrap").querySelector("table");
+  const colCells = key => table.querySelectorAll(`[data-col="${key}"]`);
+  let hot = null;
+  function highlight(key) {
+    if (key === hot) return;
+    if (hot) colCells(hot).forEach(c => c.classList.remove("colhi"));
+    hot = key;
+    if (hot) colCells(hot).forEach(c => c.classList.add("colhi"));
+  }
+  function copyCol(key) {
+    const col = COLS[key]; if (!col || !state.list.length) return;
+    const n = state.list.length;
+    copyText(state.list.map(col.value).join("\n"),
+      `Copied ${n} ${col.name}${n > 1 ? "s" : ""}. Click a cell in Excel and paste; they fill down the column.`);
+    colCells(key).forEach(c => { c.classList.remove("colcopied"); void c.offsetWidth; c.classList.add("colcopied"); });
+  }
+  table.addEventListener("mouseover", e => { const c = e.target.closest("[data-col]"); highlight(c ? c.dataset.col : null); });
+  table.addEventListener("mouseleave", () => highlight(null));
+  table.addEventListener("click", e => {
+    if (e.target.closest(".del")) return;
+    const c = e.target.closest("[data-col]"); if (c) copyCol(c.dataset.col);
+  });
+  table.addEventListener("keydown", e => {
+    const c = e.target.closest("th[data-col]");
+    if (c && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); copyCol(c.dataset.col); }
+  });
+  $("clear").addEventListener("click", () => {
+    state.list = []; renderList(); $("copybox").hidden = true; $("status").textContent = "List cleared.";
+  });
+
+  render(); renderList();
+})();
+</script>
+</body>
+</html>
